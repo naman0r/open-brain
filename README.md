@@ -43,24 +43,30 @@ cp .env.example .env
 venv/bin/python scripts/init_db.py
 ```
 
+If `scripts/init_db.py` fails with a malformed URL error, URL-encode the DB password first (especially if it contains `#`, `@`, `!`, `%`).
+
 5. Run the API:
 
 ```bash
 venv/bin/python -m uvicorn app.main:app --reload
 ```
 
-## What I Need From You (Supabase)
-
-To fully wire the next phase, provide:
-
-- `SUPABASE_URL`
-- `SUPABASE_ANON_KEY`
-- `SUPABASE_SERVICE_ROLE_KEY` (server-side only; never expose in client code)
-- `SUPABASE_DB_URL` (Postgres connection string from Supabase Database settings)
-
 Current starter endpoints:
 
 - `GET /health`
 - `POST /memories` (requires bearer token)
 - `GET /memories` (requires bearer token)
+- `GET /memories/{id}` (requires bearer token)
+- `PATCH /memories/{id}` (requires bearer token)
+- `DELETE /memories/{id}` (requires bearer token)
 - `POST /search` (requires bearer token)
+
+## Current Search Behavior
+
+`POST /search` now uses:
+
+- deterministic local embeddings (no external API key required yet)
+- pgvector cosine similarity
+- optional filters: `memory_type`, `source`
+- recency boost control via `recency_weight` (0.0 to 1.0)
+- returns a `score` per result
