@@ -11,3 +11,5 @@ venv/
 # Environment files
 .env
 
+plan*.md
+PR_SUMMARY.md
