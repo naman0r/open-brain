@@ -1,7 +1,7 @@
 PYTHON := venv/bin/python
 PIP := venv/bin/pip
 
-.PHONY: venv install run test
+.PHONY: venv install run test init-db migrate mcp-bridge
 
 venv:
 	python3 -m venv venv
@@ -16,3 +16,11 @@ run:
 test:
 	$(PYTHON) -m pytest -q
 
+init-db:
+	$(PYTHON) scripts/init_db.py
+
+migrate:
+	$(PYTHON) -m alembic upgrade head
+
+mcp-bridge:
+	$(PYTHON) -m app.mcp.stdio_bridge
