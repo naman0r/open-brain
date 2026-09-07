@@ -70,8 +70,40 @@ make test
 
 ```bash
 make mcp         # stdio, for local clients
-make mcp-http    # streamable-http, for remote clients
+make mcp-http    # streamable-http on 127.0.0.1:8000
 ```
+
+### HTTP transport
+
+```bash
+export OPEN_BRAIN_API_TOKEN=$(openssl rand -hex 32)
+venv/bin/python -m app.mcp.server --transport streamable-http --port 8000
+```
+
+The MCP endpoint is `/mcp`, guarded by a bearer token. `/healthz` is exempt so a
+tunnel or load balancer can probe it without a credential.
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' localhost:8000/healthz          # 200
+curl -s -o /dev/null -w '%{http_code}\n' -X POST localhost:8000/mcp      # 401
+```
+
+The server refuses to start if `OPEN_BRAIN_API_TOKEN` is unset or still `change-me`,
+and again if the vault root does not exist. Both checks run before the socket binds,
+so a misconfigured server never accepts a request rather than accepting it wide open.
+
+DNS-rebinding protection is on, which means the `Host` header is checked against an
+allowlist that defaults to the bind address. Behind a tunnel the Host is the tunnel
+domain, so name it:
+
+```bash
+venv/bin/python -m app.mcp.server --transport streamable-http \
+  --allowed-host vault.example.com
+```
+
+Bind to `127.0.0.1` and put the tunnel in front. Binding a public interface puts
+write-capable tools on the network behind one static token; the server warns when
+you do it but does not stop you.
 
 ### Claude Desktop
 
@@ -110,10 +142,24 @@ Restart the session, then confirm with `claude mcp list`.
 
 ### claude.ai in a browser, and ChatGPT
 
-Neither can reach localhost. Custom connectors are called from Anthropic's IP ranges
-rather than from your machine, so a remote MCP server needs a public HTTPS URL: a
-tunnel (Cloudflare Tunnel, ngrok) for development, or a real deployment. Run
-`make mcp-http` behind that, and set `OPEN_BRAIN_API_TOKEN` before exposing anything.
+Neither can reach localhost. Custom connectors are called from Anthropic's and
+OpenAI's IP ranges rather than from your machine, so they need a public HTTPS URL: a
+tunnel (Cloudflare Tunnel, ngrok) for development, or a real deployment.
+
+That is necessary but not sufficient for claude.ai. Its connector UI has no field for
+a static token; it speaks OAuth 2.1 with mandatory PKCE, so a bearer-token server
+cannot be added there no matter how it is exposed. Reaching claude.ai means
+implementing an authorization server, which this does not yet do.
+
+Bearer auth is enough for everything that lets you set a header: Claude Code over the
+network, curl, and programmatic clients.
+
+### Claude Code over HTTP
+
+```bash
+claude mcp add --transport http context-vault https://vault.example.com/mcp \
+  --header "Authorization: Bearer $OPEN_BRAIN_API_TOKEN"
+```
 
 ## Layout
 
@@ -129,8 +175,10 @@ launch-time choice rather than a design constraint.
 
 ## Status
 
-Working: the four tools over stdio, containment and quarantine, auto-commit, 36 tests.
+Working end to end: the four tools over both stdio and streamable-http, containment
+and quarantine, auto-commit under a bot identity, bearer auth, 50 tests. The HTTP path
+has been exercised with a real MCP client: handshake, `tools/list`, a `list_projects`
+call, and a refused quarantine bypass.
 
-Not done: the streamable-http transport is wired but unexercised end to end, and
-nothing is deployed. There is no OAuth, so the HTTP path is bearer-token only and
-should not be exposed publicly as-is.
+Not done: no OAuth, so claude.ai's connector UI is out of reach, and nothing is
+deployed behind a public URL.

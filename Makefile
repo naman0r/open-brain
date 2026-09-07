@@ -17,7 +17,7 @@ mcp:
 	$(PYTHON) -m app.mcp.server --transport stdio
 
 mcp-http:
-	$(PYTHON) -m app.mcp.server --transport streamable-http
+	$(PYTHON) -m app.mcp.server --transport streamable-http --host 127.0.0.1 --port 8000
 
 run:
 	$(PYTHON) -m uvicorn app.main:app --reload

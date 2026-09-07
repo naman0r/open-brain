@@ -15,6 +15,11 @@ GENERATED_DIR = "generated"
 PROJECTS_DIR = "projects"
 PROJECT_MARKER = "_project.md"
 
+# Agent commits are attributed to a bot identity so they do not land on the
+# operator's GitHub account. `.invalid` is reserved by RFC 2606 and can never be
+# claimed, so the commits stay unattributed even if the vault gains a remote.
+DEFAULT_COMMIT_IDENTITY = ("open-brain agent", "agent@open-brain.invalid")
+
 _TOKEN = re.compile(r"[a-z0-9][a-z0-9+#.-]*")
 _STOPWORDS = frozenset(
     "a an and are as at be but by for from has have how i if in is it its of on or "
@@ -67,11 +72,17 @@ class Vault:
     contained to `_resolve`.
     """
 
-    def __init__(self, root: Path | str, auto_commit: bool = False) -> None:
+    def __init__(
+        self,
+        root: Path | str,
+        auto_commit: bool = False,
+        commit_identity: tuple[str, str] = DEFAULT_COMMIT_IDENTITY,
+    ) -> None:
         self.root = Path(root).expanduser().resolve()
         if not self.root.is_dir():
             raise VaultError(f"vault root does not exist: {self.root}")
         self.auto_commit = auto_commit
+        self.commit_identity = commit_identity
 
     # --- path handling ---------------------------------------------------
 
@@ -213,13 +224,21 @@ class Vault:
     def _commit(self, rel: str, mode: str) -> None:
         if not self.auto_commit:
             return
+        name, email = self.commit_identity
         try:
             subprocess.run(
                 ["git", "-C", str(self.root), "add", "--", rel],
                 check=True, capture_output=True, timeout=15,
             )
             subprocess.run(
-                ["git", "-C", str(self.root), "commit", "-m", f"agent {mode}: {rel}"],
+                [
+                    "git", "-C", str(self.root),
+                    "-c", f"user.name={name}",
+                    "-c", f"user.email={email}",
+                    # Signing would re-attach the operator's key to a bot commit.
+                    "-c", "commit.gpgsign=false",
+                    "commit", "-m", f"agent {mode}: {rel}",
+                ],
                 check=True, capture_output=True, timeout=15,
             )
         except (subprocess.SubprocessError, OSError):

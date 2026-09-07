@@ -7,6 +7,7 @@ and delegate straight to `app.vault.Vault`.
 from __future__ import annotations
 
 import argparse
+import sys
 
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
@@ -31,7 +32,11 @@ support a claim, say so rather than inventing it. Save drafts with `write_note`.
 """
 
 mcp = MCPServer(name="context-vault", version="1.0.0", instructions=INSTRUCTIONS)
-vault = Vault(settings.vault_root, auto_commit=settings.vault_auto_commit)
+vault = Vault(
+    settings.vault_root,
+    auto_commit=settings.vault_auto_commit,
+    commit_identity=(settings.vault_commit_name, settings.vault_commit_email),
+)
 
 
 @mcp.tool()
@@ -128,11 +133,38 @@ def main() -> None:
     parser.add_argument(
         "--transport",
         default="stdio",
-        choices=["stdio", "streamable-http", "sse"],
+        choices=["stdio", "streamable-http"],
         help="stdio for local clients; streamable-http to expose over the network",
     )
+    parser.add_argument("--host", default="127.0.0.1", help="bind address (http only)")
+    parser.add_argument("--port", type=int, default=8000, help="bind port (http only)")
+    parser.add_argument(
+        "--allowed-host",
+        action="append",
+        default=None,
+        metavar="HOST",
+        help="Host header to accept, repeatable. Required when behind a tunnel, "
+             "since the Host will be the tunnel domain, not the bind address.",
+    )
     args = parser.parse_args()
-    mcp.run(transport=args.transport)
+
+    if args.transport == "stdio":
+        mcp.run(transport="stdio")
+        return
+
+    import uvicorn
+
+    from app.mcp.http import build_app
+
+    if args.host not in ("127.0.0.1", "localhost", "::1"):
+        print(
+            f"WARNING: binding {args.host} exposes write-capable tools on the network. "
+            "Prefer 127.0.0.1 behind a tunnel.",
+            file=sys.stderr,
+        )
+
+    app = build_app(host=args.host, allowed_hosts=args.allowed_host)
+    uvicorn.run(app, host=args.host, port=args.port)
 
 
 if __name__ == "__main__":

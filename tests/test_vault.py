@@ -164,6 +164,46 @@ def test_list_projects(vault):
     assert "_project.md" not in " ".join(projects[0].notes)
 
 
+class TestAutoCommit:
+    @staticmethod
+    def _init_repo(path):
+        import subprocess
+        # An empty tree has nothing to commit, so seed a file first.
+        (path / "seed.md").write_text("# seed", encoding="utf-8")
+        for args in (["init", "-q"], ["add", "-A"]):
+            subprocess.run(["git", "-C", str(path), *args], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(path), "-c", "user.name=seed", "-c", "user.email=seed@x.invalid",
+             "commit", "-qm", "seed"],
+            check=True, capture_output=True,
+        )
+
+    def _log(self, path, fmt):
+        import subprocess
+        return subprocess.run(
+            ["git", "-C", str(path), "log", "-1", f"--format={fmt}"],
+            check=True, capture_output=True, text=True,
+        ).stdout.strip()
+
+    def test_commit_uses_bot_identity_not_git_config(self, tmp_path):
+        self._init_repo(tmp_path)
+        vault = Vault(tmp_path, auto_commit=True, commit_identity=("bot", "bot@x.invalid"))
+        vault.write_note("_inbox/a.md", "# A")
+        assert self._log(tmp_path, "%an <%ae>") == "bot <bot@x.invalid>"
+        # Committer matters too: GitHub attributes on both.
+        assert self._log(tmp_path, "%cn <%ce>") == "bot <bot@x.invalid>"
+
+    def test_default_identity_is_a_bot(self, tmp_path):
+        self._init_repo(tmp_path)
+        vault = Vault(tmp_path, auto_commit=True)
+        vault.write_note("_inbox/a.md", "# A")
+        assert "@open-brain.invalid" in self._log(tmp_path, "%ae")
+
+    def test_write_succeeds_when_not_a_git_repo(self, tmp_path):
+        vault = Vault(tmp_path, auto_commit=True)
+        assert vault.write_note("_inbox/a.md", "# A") == "_inbox/a.md"
+
+
 def test_rejects_missing_root(tmp_path):
     with pytest.raises(VaultError):
         Vault(tmp_path / "nope")

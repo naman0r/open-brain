@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     api_version: str = "v1"
     vault_root: str = Field(default="~/Developer/context-vault", validation_alias="VAULT_ROOT")
     vault_auto_commit: bool = Field(default=True, validation_alias="VAULT_AUTO_COMMIT")
+    vault_commit_name: str = Field(default="open-brain agent", validation_alias="VAULT_COMMIT_NAME")
+    vault_commit_email: str = Field(
+        default="agent@open-brain.invalid", validation_alias="VAULT_COMMIT_EMAIL"
+    )
     open_brain_api_token: str = Field(default="change-me", validation_alias="OPEN_BRAIN_API_TOKEN")
 
 
