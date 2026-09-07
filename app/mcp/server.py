@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from functools import lru_cache
 
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
@@ -32,11 +33,17 @@ support a claim, say so rather than inventing it. Save drafts with `write_note`.
 """
 
 mcp = MCPServer(name="context-vault", version="1.0.0", instructions=INSTRUCTIONS)
-vault = Vault(
-    settings.vault_root,
-    auto_commit=settings.vault_auto_commit,
-    commit_identity=(settings.vault_commit_name, settings.vault_commit_email),
-)
+
+
+# Built on first use so importing this module (tests, --help) does not require
+# the vault directory to exist. The HTTP path validates it before binding instead.
+@lru_cache(maxsize=None)
+def vault() -> Vault:
+    return Vault(
+        settings.vault_root,
+        auto_commit=settings.vault_auto_commit,
+        commit_identity=(settings.vault_commit_name, settings.vault_commit_email),
+    )
 
 
 @mcp.tool()
@@ -45,7 +52,7 @@ def list_projects() -> str:
 
     Call this first to orient yourself before searching.
     """
-    projects = vault.list_projects()
+    projects = vault().list_projects()
     if not projects:
         return "No projects found."
     lines = []
@@ -76,7 +83,7 @@ def search_context(
 
     Snippets are excerpts only. Use `read_note` on a path before relying on its content.
     """
-    hits = vault.search(query, project=project, type=type, limit=limit)
+    hits = vault().search(query, project=project, type=type, limit=limit)
     if not hits:
         return f"No matches for {query!r}. Try `list_projects` or broader keywords."
     lines = []
@@ -97,7 +104,7 @@ def read_note(path: str) -> str:
             e.g. "profile/resume.md".
     """
     try:
-        note = vault.read_note(path)
+        note = vault().read_note(path)
     except VaultError as exc:
         raise ToolError(str(exc)) from exc
     return notes.dump(note)
@@ -120,7 +127,7 @@ def write_note(path: str, content: str, mode: str = "create") -> str:
     Returns the path written.
     """
     try:
-        written = vault.write_note(path, content, mode=mode)
+        written = vault().write_note(path, content, mode=mode)
     except VaultError as exc:
         # ToolError text reaches the model; a bare raise would surface only
         # "error executing tool", leaving it no way to pick a valid path.
