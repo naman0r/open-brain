@@ -13,3 +13,5 @@ venv/
 
 plan*.md
 PR_SUMMARY.md
+# macOS
+.DS_Store
